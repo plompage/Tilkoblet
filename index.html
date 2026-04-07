@@ -163,8 +163,13 @@
     .person-header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
     .person-left{min-width:0}
     .person-title-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    .person-title-row .item-name{font-size:1.08rem}
+    .person-summary{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .summary-chip{padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.03);font-size:.76rem;color:#d6e1e9}
     .muted{color:var(--muted)}
+    .person-details{display:none;margin-top:14px}
+    .person-card.expanded .person-details{display:block}
+    .person-card.expanded .expand-label::after{content:'Skjul detaljer'}
+    .expand-label::after{content:'Vis detaljer'}
     .detail-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px}
     .detail-box{border:1px solid var(--line);background:rgba(255,255,255,.025);padding:10px 12px;border-radius:14px}
     .detail-label{font-size:.74rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
@@ -268,9 +273,9 @@
 
     <div class="view active" id="view-overview">
       <div class="grid grid-3">
-        <div class="metric"><div class="metric-label">Personer</div><div class="metric-value" id="metric-people">0</div><div class="metric-note">Totalt i nettverket ditt</div></div>
         <div class="metric"><div class="metric-label">Bør følges opp</div><div class="metric-value" id="metric-follow">0</div><div class="metric-note">Høy eller middels prioritet nå</div></div>
         <div class="metric"><div class="metric-label">Kommende hendelser</div><div class="metric-value" id="metric-events">0</div><div class="metric-note">Neste 30 dager</div></div>
+        <div class="metric"><div class="metric-label">Registrerte kontaktpunkter</div><div class="metric-value" id="metric-logs">0</div><div class="metric-note">Totalt logget i appen</div></div>
       </div>
       <div class="grid grid-2-1" style="margin-top:14px">
         <div class="card">
@@ -423,6 +428,33 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="contact-modal">
+    <div class="modal" style="max-width:620px">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title">Registrer kontakt</div>
+          <div class="modal-subtitle" id="contact-modal-subtitle">Legg inn type kontakt, kommentar og eventuell oppfølging.</div>
+        </div>
+        <button class="close-btn" onclick="closeContactModal()">✕</button>
+      </div>
+      <div class="form-grid">
+        <div class="field"><label>Kontaktmåte</label>
+          <select class="select" id="contact-type">
+            <option>Melding</option><option>Telefon</option><option>Møttes</option><option>Video</option><option>Annet</option>
+          </select>
+        </div>
+        <div class="field"><label>Dato</label><input type="date" class="input" id="contact-date" /></div>
+        <div class="field full"><label>Kort kommentar</label><textarea class="textarea" id="contact-note" placeholder="F.eks. snakket om ny jobb eller planla å møtes."></textarea></div>
+        <div class="field full"><label>Ny oppfølging</label><input class="input" id="contact-follow-title" placeholder="F.eks. spør hvordan det gikk med jobbintervjuet" /></div>
+        <div class="field"><label>Oppfølgingsdato</label><input type="date" class="input" id="contact-follow-date" /></div>
+      </div>
+      <div class="modal-actions">
+        <button class="ghost-btn" onclick="closeContactModal()">Avbryt</button>
+        <button class="primary-btn" onclick="saveContactRegistration()">Lagre kontakt</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast"></div>
 
   <script>
@@ -445,6 +477,7 @@
     let calendarYear = new Date().getFullYear();
     let calendarMonth = new Date().getMonth();
     let selectedCalendarDate = dateOnly(new Date());
+    let currentContactPersonId = null;
 
     function showToast(msg){
       const el = document.getElementById('toast');
@@ -732,10 +765,11 @@
       const followups = getSortedFollowups();
       const top3 = followups.slice(0,3);
       const upcoming = getUpcomingEvents(30).slice(0,8);
+      const totalLogs = people.reduce((sum, p) => sum + ((p.contactLog || []).length), 0);
 
-      document.getElementById('metric-people').textContent = people.length;
       document.getElementById('metric-follow').textContent = followups.filter(x => x.score >= 30).length;
       document.getElementById('metric-events').textContent = upcoming.length;
+      document.getElementById('metric-logs').textContent = totalLogs;
 
       const sug = document.getElementById('top-suggestions');
       if(!top3.length){
@@ -752,7 +786,7 @@
             </div>
             <div class="reason-list">${reasons.slice(0,4).map(r => `<span class="reason-chip">${safeText(r)}</span>`).join('')}</div>
             <div class="cta-row">
-              <button class="small-btn" onclick="quickLogContact('${person.id}','Melding')">Logg melding i dag</button>
+              <button class="small-btn" onclick="openContactModal('${person.id}')">Registrer kontakt</button>
               <button class="small-btn" onclick="openPersonModal('${person.id}')">Åpne personkort</button>
             </div>
           </div>
@@ -809,34 +843,41 @@
           </div>` : '';
         const logs = (person.contactLog || []).slice(0,3).map(log => `<div class="log-row"><strong>${safeText(log.type)}</strong><span class="muted">${formatDate(log.date)}${log.note ? ' · ' + safeText(log.note) : ''}</span></div>`).join('');
         return `
-          <div class="person-card">
+          <div class="person-card" id="person-card-${person.id}">
             <div class="person-header">
               <div class="person-left">
                 <div class="person-title-row">
                   <div class="item-name">${safeText(person.name)}</div>
                   <span class="priority-pill ${priorityClass(priority)}">${priorityLabel(priority)}</span>
                 </div>
-                <div class="item-meta">${safeText(person.relationship || '–')} · ${safeText(person.closeness || '–')} · ${safeText(person.origin || 'Ikke registrert hvor dere kjenner hverandre fra')}</div>
+                <div class="item-meta">${safeText(person.relationship || '–')} · ${safeText(person.closeness || '–')} · ${person.lastContact ? 'Sist kontakt ' + formatDate(person.lastContact) : 'Ingen kontakt registrert'}</div>
+                <div class="person-summary">
+                  <span class="summary-chip">Hver ${person.contactFrequencyDays || 30}. dag</span>
+                  ${person.followUp ? '<span class="summary-chip">Har oppfølging</span>' : ''}
+                  ${person.specialDate ? '<span class="summary-chip">Har kommende hendelse</span>' : ''}
+                  ${(person.children || []).length ? `<span class="summary-chip">${(person.children || []).length} barn</span>` : ''}
+                </div>
               </div>
               <div class="cta-row" style="margin-top:0">
-                <button class="small-btn" onclick="quickLogContact('${person.id}','Melding')">Kontakt i dag</button>
+                <button class="small-btn" onclick="openContactModal('${person.id}')">Registrer kontakt</button>
+                <button class="small-btn" onclick="togglePersonDetails('${person.id}')"><span class="expand-label"></span></button>
                 <button class="small-btn" onclick="openPersonModal('${person.id}')">Rediger</button>
               </div>
             </div>
-            <div class="detail-grid">
-              <div class="detail-box"><div class="detail-label">Bursdag</div><div class="detail-value">${person.birthday ? formatDate(person.birthday) + (age !== null ? ' · ' + age + ' år' : '') : '–'}</div></div>
-              <div class="detail-box"><div class="detail-label">Siste kontakt</div><div class="detail-value">${person.lastContact ? formatDate(person.lastContact) : 'Ikke registrert'}</div></div>
-              <div class="detail-box"><div class="detail-label">Kontaktfrekvens</div><div class="detail-value">Hver ${person.contactFrequencyDays || 30}. dag</div></div>
-              <div class="detail-box"><div class="detail-label">Kontaktmåte</div><div class="detail-value">${safeText(person.contactMethod || '–')}</div></div>
-              <div class="detail-box"><div class="detail-label">Partner</div><div class="detail-value">${safeText(person.partner || '–')}</div></div>
-              <div class="detail-box"><div class="detail-label">Viktig hendelse</div><div class="detail-value">${safeText(person.specialTitle || '–')}${person.specialDate ? ' · ' + formatDate(person.specialDate) : ''}</div></div>
+            <div class="person-details">
+              <div class="detail-grid">
+                <div class="detail-box"><div class="detail-label">Bursdag</div><div class="detail-value">${person.birthday ? formatDate(person.birthday) + (age !== null ? ' · ' + age + ' år' : '') : '–'}</div></div>
+                <div class="detail-box"><div class="detail-label">Kontaktmåte</div><div class="detail-value">${safeText(person.contactMethod || '–')}</div></div>
+                <div class="detail-box"><div class="detail-label">Partner</div><div class="detail-value">${safeText(person.partner || '–')}</div></div>
+                <div class="detail-box"><div class="detail-label">Viktig hendelse</div><div class="detail-value">${safeText(person.specialTitle || '–')}${person.specialDate ? ' · ' + formatDate(person.specialDate) : ''}</div></div>
+              </div>
+              ${person.followUp ? `<div class="children-wrap"><div class="section-mini-title">Neste ting å følge opp</div><div class="detail-box"><div class="detail-value">${safeText(person.followUp)}</div></div></div>` : ''}
+              ${person.notes ? `<div class="children-wrap"><div class="section-mini-title">Notater</div><div class="detail-box"><div class="detail-value">${safeText(person.notes)}</div></div></div>` : ''}
+              ${person.interests || person.lifeSituation ? `<div class="children-wrap"><div class="section-mini-title">Personlig kontekst</div><div class="detail-grid"><div class="detail-box"><div class="detail-label">Interesser</div><div class="detail-value">${safeText(person.interests || '–')}</div></div><div class="detail-box"><div class="detail-label">Jobb / livssituasjon</div><div class="detail-value">${safeText(person.lifeSituation || '–')}</div></div></div></div>` : ''}
+              ${tags ? `<div class="children-wrap"><div class="section-mini-title">Tagger</div><div class="tag-list">${tags}</div></div>` : ''}
+              ${children}
+              ${(person.contactLog || []).length ? `<div class="log-wrap"><div class="section-mini-title">Siste kontaktlogg</div>${logs}</div>` : ''}
             </div>
-            ${person.followUp ? `<div class="children-wrap"><div class="section-mini-title">Neste ting å følge opp</div><div class="detail-box"><div class="detail-value">${safeText(person.followUp)}</div></div></div>` : ''}
-            ${person.notes ? `<div class="children-wrap"><div class="section-mini-title">Notater</div><div class="detail-box"><div class="detail-value">${safeText(person.notes)}</div></div></div>` : ''}
-            ${person.interests || person.lifeSituation ? `<div class="children-wrap"><div class="section-mini-title">Personlig kontekst</div><div class="detail-grid"><div class="detail-box"><div class="detail-label">Interesser</div><div class="detail-value">${safeText(person.interests || '–')}</div></div><div class="detail-box"><div class="detail-label">Jobb / livssituasjon</div><div class="detail-value">${safeText(person.lifeSituation || '–')}</div></div></div></div>` : ''}
-            ${tags ? `<div class="children-wrap"><div class="section-mini-title">Tagger</div><div class="tag-list">${tags}</div></div>` : ''}
-            ${children}
-            ${(person.contactLog || []).length ? `<div class="log-wrap"><div class="section-mini-title">Siste kontaktlogg</div>${logs}</div>` : ''}
           </div>
         `;
       }).join('');
@@ -866,8 +907,7 @@
             <div class="reason-list">${reasons.length ? reasons.map(r => `<span class="reason-chip">${safeText(r)}</span>`).join('') : '<span class="reason-chip">Ingen spesifikk grunn registrert</span>'}</div>
             ${person.followUp ? `<div class="detail-box" style="margin-top:12px"><div class="detail-label">Neste ting å følge opp</div><div class="detail-value">${safeText(person.followUp)}</div></div>` : ''}
             <div class="cta-row">
-              <button class="small-btn" onclick="quickLogContact('${person.id}','Melding')">Logg melding i dag</button>
-              <button class="small-btn" onclick="quickLogContact('${person.id}','Telefon')">Logg telefon i dag</button>
+              <button class="small-btn" onclick="openContactModal('${person.id}')">Registrer kontakt</button>
               <button class="small-btn" onclick="openPersonModal('${person.id}')">Åpne personkort</button>
             </div>
           </div>
@@ -985,6 +1025,9 @@
       document.getElementById('person-notes').value = person?.notes || '';
       tempChildren = (person?.children || []).map(c => ({ ...c, id: c.id || uid() }));
       tempLogs = (person?.contactLog || []).map(l => ({ ...l, id: l.id || uid() }));
+      if(person && !tempLogs.length && person.lastContact){
+        tempLogs = [{ id: uid(), date: person.lastContact, type: person.contactMethod || 'Annet', note: '' }];
+      }
       renderTempChildren();
       renderTempLogs();
       document.getElementById('child-name').value='';
@@ -1071,6 +1114,7 @@
         createdAt: currentEditId ? (getPeople().find(p => p.id === currentEditId)?.createdAt || new Date().toISOString()) : new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
+      updateDerivedLastContact(person);
 
       const people = [...getPeople()];
       const idx = people.findIndex(p => p.id === person.id);
@@ -1106,23 +1150,64 @@
       }
     }
 
-    async function quickLogContact(personId, type='Melding'){
+    function updateDerivedLastContact(person){
+      const logs = [...(person.contactLog || [])].filter(l => l.date).sort((a,b) => (b.date || '').localeCompare(a.date || ''));
+      person.lastContact = logs.length ? logs[0].date : '';
+      return person;
+    }
+
+    function togglePersonDetails(personId){
+      const el = document.getElementById('person-card-' + personId);
+      if(el) el.classList.toggle('expanded');
+    }
+
+    function openContactModal(personId){
+      currentContactPersonId = personId;
+      const person = getPeople().find(p => p.id === personId);
+      document.getElementById('contact-modal-subtitle').textContent = person ? `Registrer kontakt med ${person.name}.` : 'Legg inn type kontakt, kommentar og eventuell oppfølging.';
+      document.getElementById('contact-type').value = person?.contactMethod || 'Melding';
+      document.getElementById('contact-date').value = todayISO();
+      document.getElementById('contact-note').value = '';
+      document.getElementById('contact-follow-title').value = '';
+      document.getElementById('contact-follow-date').value = '';
+      document.getElementById('contact-modal').classList.add('active');
+    }
+
+    function closeContactModal(){
+      document.getElementById('contact-modal').classList.remove('active');
+      currentContactPersonId = null;
+    }
+
+    async function saveContactRegistration(){
+      if(!currentContactPersonId) return;
       const people = [...getPeople()];
-      const idx = people.findIndex(p => p.id === personId);
+      const idx = people.findIndex(p => p.id === currentContactPersonId);
       if(idx === -1) return;
       const person = { ...people[idx] };
-      const log = { id: uid(), date: todayISO(), type, note: 'Hurtiglogg' };
-      person.lastContact = todayISO();
+      const log = {
+        id: uid(),
+        date: document.getElementById('contact-date').value || todayISO(),
+        type: document.getElementById('contact-type').value,
+        note: document.getElementById('contact-note').value.trim()
+      };
       person.contactLog = [log, ...(person.contactLog || [])];
+      const followTitle = document.getElementById('contact-follow-title').value.trim();
+      const followDate = document.getElementById('contact-follow-date').value;
+      if(followTitle) person.followUp = followTitle;
+      if(followDate) person.specialDate = followDate;
+      if(followTitle && !person.specialTitle) person.specialTitle = followTitle;
+      if(followTitle && followDate) person.specialTitle = followTitle;
       person.updatedAt = new Date().toISOString();
+      updateDerivedLastContact(person);
       people[idx] = person;
       dataStore.people = people;
       try{
         setSyncing(true, 'Lagrer...');
         await writeData(dataStore);
+        closeContactModal();
         renderAll();
         setSyncing(false, 'Sist synkronisert ' + new Date().toLocaleTimeString('nb-NO', { hour:'2-digit', minute:'2-digit' }));
-        showToast('Kontakt registrert for ' + person.name + '.');
+        showToast('Kontakt registrert ✦');
       }catch(err){
         setSyncing(false, 'Lagring feilet');
         showToast('Feil ved registrering: ' + err.message);
@@ -1146,4 +1231,3 @@
   </script>
 </body>
 </html>
-
