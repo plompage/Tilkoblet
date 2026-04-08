@@ -9,11 +9,11 @@
 <style>
 :root {
   --bg:#0c0c0a; --bg2:#131310; --bg3:#1a1916; --bg4:#222018; --bg5:#2a2820;
-  --gold:#b8943f; --gold2:#8a6e2e; --gold3:rgba(184,148,63,.14); --gold4:rgba(184,148,63,.08);
-  --parch:#c9b99a; --parch2:#8a7a64; --parch3:rgba(201,185,154,.08); --parch4:rgba(201,185,154,.14);
-  --rust:#8b3a2a; --rust2:rgba(139,58,42,.18); --sage:#4a6650; --sage2:rgba(74,102,80,.2);
-  --text:#d4c9b0; --text2:#9a8f78; --text3:#5a5245;
-  --bdr:rgba(201,185,154,.12); --bdr2:rgba(201,185,154,.22); --bdr3:rgba(201,185,154,.32);
+  --gold:#c9a84a; --gold2:#9a7e38; --gold3:rgba(201,168,74,.16); --gold4:rgba(201,168,74,.09);
+  --parch:#ddd0b8; --parch2:#a8966e; --parch3:rgba(221,208,184,.09); --parch4:rgba(221,208,184,.16);
+  --rust:#a04438; --rust2:rgba(160,68,56,.2); --sage:#5a7a60; --sage2:rgba(90,122,96,.22);
+  --text:#e8dfc8; --text2:#c0b090; --text3:#7a7060;
+  --bdr:rgba(221,208,184,.14); --bdr2:rgba(221,208,184,.26); --bdr3:rgba(221,208,184,.38);
   --sh:0 4px 20px rgba(0,0,0,.5); --sh2:0 12px 40px rgba(0,0,0,.65);
   --r:4px; --r2:8px; --r3:12px; --nav:58px;
 }
@@ -378,7 +378,7 @@ textarea.finp{resize:vertical;min-height:72px;line-height:1.55}
     </div>
     <div class="chkrow"><input type="checkbox" id="psgift"><label for="psgift">Bursdag krever gave</label></div>
     <div class="fld"><label class="flbl">Partner</label><input class="finp" id="psprt" placeholder="Navn på partner"></div>
-    <div class="fld"><label class="flbl">Kjent fra</label><input class="finp" id="psorig" placeholder="F.eks. universitetet, jobben"></div>
+    <div class="fld"><label class="flbl">Tittel / Stilling</label><input class="finp" id="psorig" placeholder="F.eks. lege, student, designer"></div>
     <div class="fld"><label class="flbl">Interesser</label><input class="finp" id="psint" placeholder="F.eks. løping, psykologi"></div>
     <div class="fld"><label class="flbl">Livssituasjon</label><textarea class="finp" id="pslife" placeholder="Jobb, bosted, pågående situasjoner…" rows="2"></textarea></div>
     <div class="fld"><label class="flbl">Notater</label><textarea class="finp" id="psnotes" placeholder="Hva er viktig å huske?" rows="2"></textarea></div>
@@ -578,6 +578,21 @@ function avHTML(p,sz=40,ac='cav',ic='cin'){if(p.photo)return `<img class="${ac}"
 // ─── HOME ───
 function renderHome(){updateHdr();renderHContacts();renderHEvents();renderHGifts();updGBadge()}
 
+// Detailed age: years and months
+function ageDetailed(bday){
+  if(!bday)return null;
+  const b=pd(bday),t=pd(toISO());
+  let y=t.getFullYear()-b.getFullYear(),m=t.getMonth()-b.getMonth();
+  if(t.getDate()<b.getDate())m--;
+  if(m<0){y--;m+=12}
+  if(y<0)return null;
+  if(y===0)return `${m} md`;
+  if(m===0)return `${y} år`;
+  return `${y} år ${m} md`;
+}
+// dd.mm format
+function fmtDDMM(s){if(!s)return '';const d=pd(s);return String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0')}
+
 function renderHContacts(){
   const list=db.people.slice().sort((a,b)=>score(b)-score(a)).slice(0,5);
   if(!list.length){$('hcontacts').innerHTML='<div class="esl"><div class="esi">👥</div><div class="esb">Ingen personer ennå.<br>Gå til Personer for å legge til.</div></div>';return}
@@ -590,15 +605,45 @@ function renderHContacts(){
     else if(since!==null)why.push(`${since} dag${since===1?'':'er'} siden sist`);
     if(p.birthday){const d=dAnnual(p.birthday);if(d!==null&&d<=14)why.push(`Bursdag om ${d} dag${d===1?'':'er'} 🎂`)}
     if(p.followupText&&p.followupDate){const d=dBetween(toISO(),p.followupDate);if(d!==null&&d>=0&&d<=7)why.push('Oppfølging: '+esc(p.followupText))}
-    return `<div class="ci"><div class="ubar ${ubar}"></div>${avHTML(p,40)}<div class="cnfo"><div class="cname">${esc(p.name)}</div><div class="cwhy">${why.join(' · ')}</div><div class="cmeta">${esc(p.type||'')}${p.contactFreq?' · Hver '+p.contactFreq+'. dag':''}</div></div><button class="btn btn-g btn-sm" style="flex-shrink:0;" onclick="openContactSheet('${p.id}')">Kontakt</button></div>`;
+    // Aktuelt quick-info
+    const aktEvs=buildPersonEvents(p).slice(0,2).map(e=>`<span style="font-size:.7rem;color:var(--gold);margin-right:6px;">· ${esc(e.title)} (${e.days===0?'i dag':e.days===1?'i morgen':'om '+e.days+'d'})</span>`).join('');
+    return `<div class="ci" style="cursor:pointer;" onclick="toggleHomeDetail('${p.id}')">
+      <div class="ubar ${ubar}"></div>
+      ${avHTML(p,40)}
+      <div class="cnfo">
+        <div class="cname">${esc(p.name)}</div>
+        <div class="cwhy">${why.join(' · ')}</div>
+        ${aktEvs?`<div style="margin-top:2px;">${aktEvs}</div>`:''}
+        <div class="cmeta">${esc(p.type||'')}${p.contactFreq?' · Hver '+p.contactFreq+'. dag':''}</div>
+      </div>
+      <button class="btn btn-g btn-sm" style="flex-shrink:0;" onclick="event.stopPropagation();openContactSheet('${p.id}')">Registrer kontakt</button>
+    </div>
+    <div id="hd-${p.id}" style="display:none;background:var(--bg4);border-radius:var(--r2);padding:9px 10px;margin-bottom:6px;font-size:.83rem;">
+      ${p.interests?`<div style="margin-bottom:4px;"><span style="color:var(--parch2);font-family:'Cormorant SC',serif;font-size:.63rem;letter-spacing:.08em;">Interesser</span><br><span style="color:var(--text2);">${esc(p.interests)}</span></div>`:''}
+      ${p.life?`<div style="margin-bottom:4px;"><span style="color:var(--parch2);font-family:'Cormorant SC',serif;font-size:.63rem;letter-spacing:.08em;">Livssituasjon</span><br><span style="color:var(--text2);">${esc(p.life)}</span></div>`:''}
+      ${p.followupText?`<div style="margin-bottom:4px;"><span style="color:var(--parch2);font-family:'Cormorant SC',serif;font-size:.63rem;letter-spacing:.08em;">Oppfølging</span><br><span style="color:var(--gold);">→ ${esc(p.followupText)}${p.followupDate?' · '+fmtS(p.followupDate):''}</span></div>`:''}
+      ${p.notes?`<div><span style="color:var(--parch2);font-family:'Cormorant SC',serif;font-size:.63rem;letter-spacing:.08em;">Notater</span><br><span style="color:var(--text2);">${esc(p.notes)}</span></div>`:''}
+      ${!p.interests&&!p.life&&!p.followupText&&!p.notes?'<span style="color:var(--text3);">Ingen ekstra info registrert.</span>':''}
+    </div>`;
   }).join('')
+}
+function toggleHomeDetail(pid){const el=$('hd-'+pid);if(el)el.style.display=el.style.display==='none'?'block':'none'}
+
+// Build upcoming events for a single person (used for "aktuelt")
+function buildPersonEvents(p){
+  const evs=[];
+  if(p.birthday){const d=dAnnual(p.birthday),next=nextAnnual(p.birthday);if(d!==null)evs.push({title:p.name+' bursdag',days:d,date:next})}
+  (p.children||[]).forEach(c=>{if(c.birthday){const d=dAnnual(c.birthday);if(d!==null)evs.push({title:c.name+' bursdag',days:d})}});
+  if(p.followupText&&p.followupDate){const d=dBetween(toISO(),p.followupDate);if(d!==null&&d>=0)evs.push({title:p.followupText,days:d})}
+  (p.reminders||[]).filter(r=>!r.done).forEach(r=>{const next=remNext(r);if(!next)return;const d=dBetween(toISO(),next);if(d!==null&&d>=0)evs.push({title:r.customTitle||remLabel(r.type),days:d})});
+  return evs.sort((a,b)=>a.days-b.days);
 }
 
 function buildEvents(){
   const evs=[];
   db.people.forEach(p=>{
-    if(p.birthday){const d=dAnnual(p.birthday),next=nextAnnual(p.birthday);evs.push({type:'birthday',date:next,days:d,title:p.name+' har bursdag',sub:calcAge(p.birthday)!==null?'Fyller '+(calcAge(p.birthday)+1)+' år':'',pid:p.id,giftNeeded:p.giftNeeded})}
-    (p.children||[]).forEach(c=>{if(c.birthday){const d=dAnnual(c.birthday),next=nextAnnual(c.birthday);evs.push({type:'birthday',date:next,days:d,title:c.name+' har bursdag',sub:'Barn av '+p.name,pid:p.id})}});
+    if(p.birthday){const d=dAnnual(p.birthday),next=nextAnnual(p.birthday);const a=calcAge(p.birthday);const sub=a!==null?'Fyller '+(a+1)+' år':'';evs.push({type:'birthday',date:next,days:d,title:p.name+' har bursdag',sub,pid:p.id,giftNeeded:p.giftNeeded})}
+    (p.children||[]).forEach(c=>{if(c.birthday){const d=dAnnual(c.birthday),next=nextAnnual(c.birthday);const a=calcAge(c.birthday);const sub=(a!==null?'Fyller '+(a+1)+' år':'')+' · Barn av '+p.name;evs.push({type:'birthday',date:next,days:d,title:c.name+' har bursdag',sub,pid:p.id})}});
     if(p.followupText&&p.followupDate){const d=dBetween(toISO(),p.followupDate);if(d!==null&&d>=0)evs.push({type:'followup',date:p.followupDate,days:d,title:p.followupText,sub:p.name,pid:p.id})}
     (p.reminders||[]).filter(r=>!r.done).forEach(r=>{const next=remNext(r);if(!next)return;const d=dBetween(toISO(),next);if(d!==null&&d>=0)evs.push({type:'reminder',date:next,days:d,title:r.customTitle||remLabel(r.type),sub:p.name,pid:p.id,rid:r.id})});
   });
@@ -627,16 +672,20 @@ function checkEv(pid,type,rid,el){
 function giftList(all){
   const gifts=[];
   db.people.forEach(p=>{
+    // Person birthday gift
     if(p.giftNeeded&&p.birthday){const next=nextAnnual(p.birthday),d=dAnnual(p.birthday);const bought=(p.giftHistory||[]).some(h=>h.label==='Bursdagsgave'&&h.date>=(next||''));if(!bought)gifts.push({pid:p.id,name:p.name,label:'Bursdagsgave',date:next,days:d??999,rid:'birthday',ideas:p.giftIdeas||[]})}
+    // Children birthday gifts
+    (p.children||[]).filter(c=>c.giftNeeded&&c.birthday).forEach(c=>{const next=nextAnnual(c.birthday),d=dAnnual(c.birthday);const lbl=c.name+' – Bursdagsgave';const bought=(p.giftHistory||[]).some(h=>h.label===lbl&&h.date>=(next||''));if(!bought)gifts.push({pid:p.id,name:p.name,label:lbl,date:next,days:d??999,rid:'child-'+c.id,ideas:p.giftIdeas||[]})});
+    // Reminders with gift
     (p.reminders||[]).filter(r=>r.includesGift&&!r.done).forEach(r=>{const next=remNext(r);if(!next&&!all)return;const d=next?dBetween(toISO(),next):999;gifts.push({pid:p.id,name:p.name,label:r.customTitle||remLabel(r.type),date:next,days:d??999,rid:r.id,ideas:p.giftIdeas||[]})});
   });
   return gifts.sort((a,b)=>a.days-b.days);
 }
 
 function renderHGifts(){
-  const gifts=giftList(false).slice(0,5);
-  if(!gifts.length){$('hgifts').innerHTML='<div class="esl"><div class="esb">Ingen kommende gaver.</div></div>';return}
-  $('hgifts').innerHTML=gifts.map(g=>{const w=g.days===0?'I dag':g.days===1?'I morgen':`Om ${g.days}d`;return `<div class="gstrip"><div style="font-size:.9rem;flex-shrink:0;">🎁</div><div class="gsinfo"><div class="gsn">${esc(g.name)}</div><div class="gso">${esc(g.label)}</div></div><div style="font-size:.68rem;color:var(--gold);font-family:'Cormorant SC',serif;flex-shrink:0;">${w}</div><button class="btn btn-q btn-sm" style="flex-shrink:0;" onclick="openGiftSheet('${g.pid}','${g.rid}')">Kjøpt</button></div>`}).join('')
+  const gifts=giftList(true).slice(0,5);
+  if(!gifts.length){$('hgifts').innerHTML='<div class="esl"><div class="esb">Ingen gaver registrert.</div></div>';return}
+  $('hgifts').innerHTML=gifts.map(g=>{const w=g.days===0?'I dag':g.days===1?'I morgen':g.days<999?`Om ${g.days}d`:'–';const gc=g.days<=7?'var(--rust)':g.days<=30?'var(--gold)':'var(--text3)';return `<div class="gstrip"><div style="font-size:.9rem;flex-shrink:0;">🎁</div><div class="gsinfo"><div class="gsn">${esc(g.name)}</div><div class="gso">${esc(g.label)}</div></div><div style="font-size:.68rem;color:${gc};font-family:'Cormorant SC',serif;flex-shrink:0;">${w}</div><button class="btn btn-q btn-sm" style="flex-shrink:0;" onclick="openGiftSheet('${g.pid}','${g.rid}')">Kjøpt</button></div>`}).join('')
 }
 
 // ─── PEOPLE ───
@@ -649,27 +698,68 @@ function renderPeople(){
 }
 
 function renderPCard(p){
-  const r=getRating(p),last=lastContact(p),since=last?dBetween(last,toISO()):null,freq=parseInt(p.contactFreq)||30;
+  const r=getRating(p),last=lastContact(p),since=last?dBetween(last,toISO()):null;
   const isExp=xPid===p.id;
   let dinfo='';
   if(!r)dinfo='Kjernefamilie';
-  else if(r.cls==='rbg')dinfo=`${r.dl} dager til neste`;
-  else if(r.dl>0)dinfo=`${r.dl} dager over`;
+  else if(r.cls==='rbg')dinfo=`${r.dl}d til neste`;
+  else if(r.dl>0)dinfo=`${r.dl}d over`;
+  const bdayStr=p.birthday?`<span style="font-size:.7rem;color:var(--parch2);margin-left:7px;font-family:'Cormorant SC',serif;letter-spacing:.04em;">${fmtDDMM(p.birthday)}${calcAge(p.birthday)!==null?' · '+calcAge(p.birthday)+' år':''}</span>`:'';
   const chips=[];
   if(p.type)chips.push(`<span class="chip chn">${esc(p.type)}</span>`);
   if(p.birthday){const d=dAnnual(p.birthday);if(d!==null&&d<=30)chips.push(`<span class="chip chg">🎂 ${d}d</span>`)}
   if(p.giftNeeded)chips.push(`<span class="chip chr">Gave</span>`);
-  return `<div class="pcard" id="pc-${p.id}"><div class="pctop">${avHTML(p,44,'pcav','pcin')}<div class="pcmain"><div class="pcname">${esc(p.name)}</div><div class="pcmeta">${esc(p.type||'')}${p.origin?' · '+esc(p.origin):''}</div><div class="pcchips">${chips.join('')}${(p.tags||[]).map(t=>`<span class="chip chn">${esc(t)}</span>`).join('')}</div></div><div class="pcr">${r?`<div class="rbadge ${r.cls}">${esc(r.lbl)}</div>`:'<div class="rbadge rbk">Kjernefamilie</div>'}<div class="dnote">${dinfo}</div>${since!==null?`<div class="dnote">Sist: ${since}d siden</div>`:''}</div></div><div class="pcact"><button class="btn btn-g btn-sm" onclick="openContactSheet('${p.id}')">Kontakt</button><button class="btn btn-q btn-sm" onclick="toggleDetail('${p.id}')">Detaljer</button><button class="btn btn-q btn-sm" onclick="openPersonSheet('${p.id}')">Rediger</button></div><div class="dtp ${isExp?'open':''}" id="dt-${p.id}">${isExp?renderDetail(p):''}</div></div>`;
+  return `<div class="pcard" id="pc-${p.id}">
+    <div class="pctop" style="cursor:pointer;" onclick="toggleDetail('${p.id}')">
+      ${avHTML(p,44,'pcav','pcin')}
+      <div class="pcmain">
+        <div style="display:flex;align-items:baseline;flex-wrap:wrap;gap:0;""><div class="pcname">${esc(p.name)}</div>${bdayStr}</div>
+        <div class="pcmeta">${esc(p.type||'')}${p.origin?' · '+esc(p.origin):''}</div>
+        <div class="pcchips">${chips.join('')}${(p.tags||[]).map(t=>`<span class="chip chn">${esc(t)}</span>`).join('')}</div>
+      </div>
+      <div class="pcr">
+        ${r?`<div class="rbadge ${r.cls}">${esc(r.lbl)}</div>`:'<div class="rbadge rbk">Kjernefamilie</div>'}
+        <div class="dnote">${dinfo}</div>
+        ${since!==null?`<div class="dnote">Sist: ${since}d siden</div>`:''}
+      </div>
+    </div>
+    <div class="pcact">
+      <button class="btn btn-g btn-sm" onclick="openContactSheet('${p.id}')">Registrer kontakt</button>
+      ${isExp?`<button class="btn btn-q btn-sm" onclick="openPersonSheet('${p.id}')">Rediger</button>`:''}
+    </div>
+    <div class="dtp ${isExp?'open':''}" id="dt-${p.id}">${isExp?renderDetail(p):''}</div>
+  </div>`;
 }
 
 function toggleDetail(id){xPid=xPid===id?null:id;renderPeople()}
 
 function renderDetail(p){
   const log=(p.contactLog||[]).slice().sort((a,b)=>b.date.localeCompare(a.date));
-  return `<div class="dtabs"><div class="dtb active" onclick="swDTab(this,'info','${p.id}')">Info</div><div class="dtb" onclick="swDTab(this,'log','${p.id}')">Logg (${log.length})</div><div class="dtb" onclick="swDTab(this,'barn','${p.id}')">Barn (${(p.children||[]).length})</div><div class="dtb" onclick="swDTab(this,'gaver','${p.id}')">Gaver</div></div>
-  <div class="dpn active" id="dpn-info-${p.id}"><div class="igrid mt8">${p.birthday?`<div class="ibox"><div class="iblbl">Bursdag</div><div class="ibval">${fmtL(p.birthday)}${calcAge(p.birthday)!==null?' ('+calcAge(p.birthday)+' år)':''}</div></div>`:''} ${p.partner?`<div class="ibox"><div class="iblbl">Partner</div><div class="ibval">${esc(p.partner)}</div></div>`:''} ${p.interests?`<div class="ibox"><div class="iblbl">Interesser</div><div class="ibval">${esc(p.interests)}</div></div>`:''} ${p.life?`<div class="ibox"><div class="iblbl">Livssituasjon</div><div class="ibval">${esc(p.life)}</div></div>`:''} ${p.followupText&&p.followupDate?`<div class="ibox fcol"><div class="iblbl">Oppfølging</div><div class="ibval">${esc(p.followupText)} · ${fmtS(p.followupDate)}</div></div>`:''} ${p.notes?`<div class="ibox fcol"><div class="iblbl">Notater</div><div class="ibval" style="white-space:pre-wrap;">${esc(p.notes)}</div></div>`:''}</div></div>
+  // Build aktuelt events
+  const aktEvs=buildPersonEvents(p);
+  const aktHTML=!aktEvs.length?'<div class="tfnt tsm" style="padding:7px 0;">Ingen kommende oppfølginger.</div>':aktEvs.map(e=>{
+    const w=e.days===0?'I dag':e.days===1?'I morgen':`Om ${e.days} dager`;
+    return `<div class="loge"><div class="logt"><span class="logt1">${esc(e.title)}</span><span class="logt2" style="color:var(--gold);">${w}</span></div></div>`;
+  }).join('');
+  return `<div class="dtabs">
+    <div class="dtb active" onclick="swDTab(this,'akt','${p.id}')">Aktuelt</div>
+    <div class="dtb" onclick="swDTab(this,'info','${p.id}')">Info</div>
+    <div class="dtb" onclick="swDTab(this,'log','${p.id}')">Logg (${log.length})</div>
+    <div class="dtb" onclick="swDTab(this,'barn','${p.id}')">Barn (${(p.children||[]).length})</div>
+    <div class="dtb" onclick="swDTab(this,'gaver','${p.id}')">Gaver</div>
+  </div>
+  <div class="dpn active" id="dpn-akt-${p.id}">${aktHTML}</div>
+  <div class="dpn" id="dpn-info-${p.id}">
+    <div class="igrid mt8">
+      ${p.birthday?`<div class="ibox"><div class="iblbl">Bursdag</div><div class="ibval">${fmtDDMM(p.birthday)}${calcAge(p.birthday)!==null?' · '+calcAge(p.birthday)+' år':''}</div></div>`:''}
+      ${p.partner?`<div class="ibox"><div class="iblbl">Partner</div><div class="ibval">${esc(p.partner)}</div></div>`:''}
+    </div>
+    ${p.interests?`<div class="ibox mt8" style="width:100%;"><div class="iblbl">Interesser</div><div class="ibval">${esc(p.interests)}</div></div>`:''}
+    ${p.life?`<div class="ibox mt8" style="width:100%;"><div class="iblbl">Livssituasjon</div><div class="ibval" style="white-space:pre-wrap;">${esc(p.life)}</div></div>`:''}
+    ${p.notes?`<div class="ibox mt8" style="width:100%;"><div class="iblbl">Notater</div><div class="ibval" style="white-space:pre-wrap;">${esc(p.notes)}</div></div>`:''}
+  </div>
   <div class="dpn" id="dpn-log-${p.id}">${!log.length?'<div class="tfnt tsm" style="padding:7px 0;">Ingen kontaktlogg.</div>':''}${log.map(e=>`<div class="loge"><div class="logt"><span class="logt1">${esc(e.type)}</span><span class="logt2">${fmtL(e.date)}</span></div>${e.content?`<div class="logn">${esc(e.content)}</div>`:''} ${e.feeling?`<div class="logn ital">Humør: ${esc(e.feeling)}</div>`:''} ${e.occupied?`<div class="logn ital">Opptatt av: ${esc(e.occupied)}</div>`:''} ${e.followupText?`<div class="logf">→ ${esc(e.followupText)}</div>`:''}</div>`).join('')}</div>
-  <div class="dpn" id="dpn-barn-${p.id}">${!(p.children||[]).length?'<div class="tfnt tsm" style="padding:7px 0;">Ingen barn registrert.</div>':''}${(p.children||[]).map(c=>`<div class="chrow"><div><div class="fw5">${esc(c.name)}</div>${c.birthday?`<div class="tfnt tsm">${fmtL(c.birthday)}${calcAge(c.birthday)!==null?' · '+calcAge(c.birthday)+' år':''}</div>`:''}</div><div>${c.giftNeeded?'<span class="chip chr">Gave</span>':''}</div></div>`).join('')}</div>
+  <div class="dpn" id="dpn-barn-${p.id}">${!(p.children||[]).length?'<div class="tfnt tsm" style="padding:7px 0;">Ingen barn registrert.</div>':''}${(p.children||[]).map(c=>`<div class="chrow"><div><div class="fw5">${esc(c.name)}</div>${c.birthday?`<div class="tfnt tsm">${fmtDDMM(c.birthday).replace('.','.').slice(0,5)}.${pd(c.birthday).getFullYear().toString().slice(-2)} · ${ageDetailed(c.birthday)||'–'}</div>`:''}</div><div>${c.giftNeeded?'<span class="chip chr">Gave</span>':''}</div></div>`).join('')}</div>
   <div class="dpn" id="dpn-gaver-${p.id}"><div class="sh" style="margin-top:6px;">Gaveidéer</div><div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:9px;">${!(p.giftIdeas||[]).length?'<span class="tfnt tsm">Ingen idéer.</span>':''}${(p.giftIdeas||[]).map(g=>`<span class="gitag">${esc(g)}</span>`).join('')}</div><div class="sh">Gavehistorikk</div>${!(p.giftHistory||[]).length?'<div class="tfnt tsm">Ingen historikk.</div>':''}${(p.giftHistory||[]).slice().sort((a,b)=>b.date.localeCompare(a.date)).map(h=>`<div class="loge"><div class="logt"><span class="logt1">${esc(h.label)}</span><span class="logt2">${fmtS(h.date)}</span></div><div class="logn">${esc(h.what)}</div></div>`).join('')}</div>`;
 }
 
@@ -677,7 +767,8 @@ function swDTab(el,pane,pid){
   const panel=$(`dt-${pid}`);
   panel.querySelectorAll('.dtb').forEach(t=>t.classList.remove('active'));
   panel.querySelectorAll('.dpn').forEach(t=>t.classList.remove('active'));
-  el.classList.add('active');$(`dpn-${pane}-${pid}`)?.classList.add('active');
+  el.classList.add('active');
+  const dp=$(`dpn-${pane}-${pid}`);if(dp)dp.classList.add('active');
 }
 
 // ─── PERSON SHEET ───
@@ -710,7 +801,20 @@ function addPTag(){const v=$('pstagi').value.trim();if(!v)return;tPtags.push(v);
 function renderGIdeas(){$('pideaд').innerHTML=tGideas.map((t,i)=>`<div class="gitag">${esc(t)}<button onclick="tGideas.splice(${i},1);renderGIdeas()">×</button></div>`).join('')}
 function addGIdea(){const v=$('psidea').value.trim();if(!v)return;tGideas.push(v);$('psidea').value='';renderGIdeas()}
 
-function renderPChildren(){$('pchildren').innerHTML=tChildren.map((c,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--bdr);"><div><div class="fw5 tsm">${esc(c.name)}</div><div class="tfnt" style="font-size:.7rem;">${c.birthday?fmtS(c.birthday):''}${c.giftNeeded?' · Gave':''}</div></div><button class="btn btn-q btn-sm" onclick="tChildren.splice(${i},1);renderPChildren()">Fjern</button></div>`).join('')}
+function renderPChildren(){
+  $('pchildren').innerHTML=tChildren.map((c,i)=>`
+    <div style="background:var(--bg5);border:1px solid var(--bdr);border-radius:var(--r);padding:8px;margin-bottom:6px;">
+      <div class="frow" style="margin-bottom:5px;">
+        <div class="fld" style="margin-bottom:0;"><input class="finp" value="${esc(c.name)}" placeholder="Navn" oninput="tChildren[${i}].name=this.value" style="font-size:.85rem;"></div>
+        <div class="fld" style="margin-bottom:0;"><input type="date" class="finp" value="${c.birthday||''}" oninput="tChildren[${i}].birthday=this.value" style="font-size:.85rem;"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div class="chkrow" style="padding:0;"><input type="checkbox" id="chgifted${i}" ${c.giftNeeded?'checked':''} onchange="tChildren[${i}].giftNeeded=this.checked"><label for="chgifted${i}" style="font-size:.8rem;">Skal ha gave</label></div>
+        <button class="btn btn-d btn-sm" onclick="tChildren.splice(${i},1);renderPChildren()">Fjern</button>
+      </div>
+      ${c.birthday?`<div style="font-size:.7rem;color:var(--text3);margin-top:3px;">${fmtDDMM(c.birthday)} · ${ageDetailed(c.birthday)||'–'}</div>`:''}
+    </div>`).join('');
+}
 function addChild(){const nm=$('chnm').value.trim();if(!nm){toast('Skriv inn barnets navn.');return}tChildren.push({id:uid(),name:nm,birthday:$('chbd').value,giftNeeded:$('chgift').checked});$('chnm').value='';$('chbd').value='';$('chgift').checked=false;renderPChildren()}
 
 function onRemChg(){const t=$('remtype').value;$('remdatew').style.display=(t==='bryllupsdag'||t==='annet')?'':'none'}
