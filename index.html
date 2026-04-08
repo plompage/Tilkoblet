@@ -1277,15 +1277,15 @@
 // ============================================
 //  CONFIG
 // ============================================
-const CLIENT_ID = '484257985344-6le0eglklh0dl8gr0ocjtqbm1h5o83b6.apps.googleusercontent.com';
-const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
+const CLIENT_ID = '202663283290-uqk6a5feg4207di0gplqc2n7l56j7odg.apps.googleusercontent.com';
+const REDIRECT_URI = 'https://plompage.github.io/Tilkoblet/';
+const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile';
 const FOLDER_NAME = 'Tilkoblet';
 const FILE_NAME = 'tilkoblet-data.json';
 
 // ============================================
 //  STATE
 // ============================================
-let tokenClient = null;
 let accessToken = null;
 let driveFileId = null;
 let driveFolderId = null;
@@ -1432,28 +1432,39 @@ function norMorsdagDate(year) {
 // ============================================
 //  GOOGLE AUTH
 // ============================================
-function initGoogleAuth() {
-  tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: CLIENT_ID,
-    scope: SCOPES,
-    callback: (response) => {
-      if (response.error) { console.error(response); return; }
-      accessToken = response.access_token;
-      onAuthenticated();
-    }
-  });
-}
 
 function signIn() {
-  if (!tokenClient) {
-    alert('Google Identity Services ikke lastet ennå. Prøv igjen.');
-    return;
+  const state = Math.random().toString(36).slice(2);
+  sessionStorage.setItem('oauth_state', state);
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: REDIRECT_URI,
+    response_type: 'token',
+    scope: SCOPES,
+    state,
+    include_granted_scopes: 'true'
+  });
+  window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+}
+
+function parseTokenFromHash() {
+  const hash = window.location.hash.substring(1);
+  if (!hash) return null;
+  const p = new URLSearchParams(hash);
+  const token = p.get('access_token');
+  const state = p.get('state');
+  if (token && state && state === sessionStorage.getItem('oauth_state')) {
+    history.replaceState(null, '', window.location.pathname);
+    sessionStorage.removeItem('oauth_state');
+    return token;
   }
-  tokenClient.requestAccessToken({ prompt: 'consent' });
+  return null;
 }
 
 function signOut() {
-  if (accessToken) google.accounts.oauth2.revoke(accessToken);
+  if (accessToken) {
+    fetch('https://oauth2.googleapis.com/revoke?token=' + accessToken, { method: 'POST' }).catch(() => {});
+  }
   accessToken = null;
   currentUser = null;
   appData = { people: [], version: 2 };
@@ -2832,25 +2843,19 @@ function confirmGiftBought() {
 // ============================================
 //  GOOGLE IDENTITY SERVICES LOAD
 // ============================================
-window.onload = function() {
-  // Load Google Identity Services
-  const script = document.createElement('script');
-  script.src = 'https://accounts.google.com/gsi/client';
-  script.async = true;
-  script.defer = true;
-  script.onload = () => {
-    initGoogleAuth();
-    // Check if token available from session
-    document.getElementById('login-screen').classList.add('active');
-  };
-  document.head.appendChild(script);
-
-  // Greeting
+window.onload = async function() {
   updateGreeting();
-  // Calendar init
   const now = new Date();
   calendarYear = now.getFullYear();
   calendarMonth = now.getMonth();
+
+  const token = parseTokenFromHash();
+  if (token) {
+    accessToken = token;
+    await onAuthenticated();
+  } else {
+    showLogin();
+  }
 };
 </script>
 
