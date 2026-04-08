@@ -29,7 +29,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
 
 /* LAYOUT */
 #app{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column}
-.page{display:none;flex:1;padding-bottom:calc(var(--nav)+16px)}
+.page{display:none;flex:1;padding-bottom:calc(var(--nav) + 32px)}
 .page.active{display:block;animation:fi .2s ease}
 @keyframes fi{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
 .pi{max-width:680px;margin:0 auto;padding:0 14px}
@@ -378,7 +378,7 @@ textarea.finp{resize:vertical;min-height:72px;line-height:1.55}
     </div>
     <div class="chkrow"><input type="checkbox" id="psgift"><label for="psgift">Bursdag krever gave</label></div>
     <div class="fld"><label class="flbl">Partner</label><input class="finp" id="psprt" placeholder="Navn på partner"></div>
-    <div class="fld"><label class="flbl">Tittel / Stilling</label><input class="finp" id="psorig" placeholder="F.eks. lege, student, designer"></div>
+    <div class="fld"><label class="flbl">Relasjon</label><input class="finp" id="psorig" placeholder="F.eks. søster, tante, samboer, kollega…"></div>
     <div class="fld"><label class="flbl">Interesser</label><input class="finp" id="psint" placeholder="F.eks. løping, psykologi"></div>
     <div class="fld"><label class="flbl">Livssituasjon</label><textarea class="finp" id="pslife" placeholder="Jobb, bosted, pågående situasjoner…" rows="2"></textarea></div>
     <div class="fld"><label class="flbl">Notater</label><textarea class="finp" id="psnotes" placeholder="Hva er viktig å huske?" rows="2"></textarea></div>
@@ -391,18 +391,18 @@ textarea.finp{resize:vertical;min-height:72px;line-height:1.55}
       <div class="chkrow" style="padding:2px 0 5px;"><input type="checkbox" id="chgift"><label for="chgift">Skal ha gave</label></div>
       <button class="btn btn-q btn-sm btn-fw" onclick="addChild()">Legg til barn</button>
     </div>
-    <div class="sh">Faste påminnelser</div>
+    <div class="sh">Påminnelser</div>
     <div id="preminders"></div>
     <div style="background:var(--bg4);border:1px solid var(--bdr);border-radius:var(--r);padding:9px;margin-top:5px;">
+      <div class="fld" style="margin-bottom:6px;"><label class="flbl">Tittel *</label><input class="finp" id="remtitle" placeholder="Hva skal du huske?"></div>
       <div class="frow" style="margin-bottom:6px;">
-        <div class="fld" style="margin-bottom:0;"><label class="flbl">Type</label><select class="finp" id="remtype" onchange="onRemChg()"><option value="">Velg…</option><option value="julegave">Julegave</option><option value="morsdagsgave">Morsdagsgave</option><option value="julegratulasjon">Julegratulasjon</option><option value="paaskegratulasjon">Påskegratulasjon</option><option value="bryllupsdag">Bryllupsdag</option><option value="annet">Annet</option></select></div>
-        <div class="fld" style="margin-bottom:0;"><label class="flbl">Tittel (valgfritt)</label><input class="finp" id="remtitle" placeholder="Egendefinert tittel"></div>
-      </div>
-      <div class="frow" style="margin-bottom:6px;" id="remdatew">
         <div class="fld" style="margin-bottom:0;"><label class="flbl">Dato</label><input type="date" class="finp" id="remdate"></div>
-        <div class="fld" style="margin-bottom:0;"><label class="flbl">Dager i forveien</label><input type="number" class="finp" id="remdays" value="14" min="0"></div>
+        <div class="fld" style="margin-bottom:0;"><label class="flbl">Varsle X dager før</label><input type="number" class="finp" id="remdays" value="0" min="0"></div>
       </div>
-      <div class="chkrow" style="padding:2px 0 5px;"><input type="checkbox" id="remgift"><label for="remgift">Inkluderer gave</label></div>
+      <div class="frow" style="margin-bottom:6px;">
+        <div class="chkrow" style="padding:0;"><input type="checkbox" id="remrecurring"><label for="remrecurring" style="font-size:.8rem;">Fast / gjentakende</label></div>
+        <div class="chkrow" style="padding:0;"><input type="checkbox" id="remgift"><label for="remgift" style="font-size:.8rem;">Inkluderer gave</label></div>
+      </div>
       <button class="btn btn-q btn-sm btn-fw" onclick="addReminder()">Legg til påminnelse</button>
     </div>
   </div>
@@ -515,12 +515,24 @@ function hBase(type,year){
   return null;
 }
 function remNext(r){
-  const today=toISO(),y=new Date().getFullYear();let base=null;
-  if(['julegave','julegratulasjon','paaskegratulasjon','morsdagsgave'].includes(r.type)){base=hBase(r.type,y);if(base&&base<today)base=hBase(r.type,y+1)}
-  else if(r.type==='bryllupsdag'&&r.date){base=nextAnnual(r.date)}
-  else if(r.date){base=nextAnnual(r.date)}
-  if(!base)return null;
-  const bd=pd(base);bd.setDate(bd.getDate()-(parseInt(r.daysBefore)||14));return bd.toISOString().slice(0,10)
+  const today=toISO();
+  // New model: free date with optional recurring
+  if(r.date){
+    const daysBefore=parseInt(r.daysBefore)||0;
+    if(r.recurring){
+      // Recurring: find next annual occurrence
+      let base=nextAnnual(r.date);
+      const triggerDate=pd(base);triggerDate.setDate(triggerDate.getDate()-daysBefore);
+      const trig=triggerDate.toISOString().slice(0,10);
+      return trig;
+    } else {
+      // One-time: compute trigger date
+      const base=pd(r.date);base.setDate(base.getDate()-daysBefore);
+      const trig=base.toISOString().slice(0,10);
+      return trig>=today||r.date>=today?trig:null;
+    }
+  }
+  return null;
 }
 function remLabel(t){return{julegave:'Julegave',morsdagsgave:'Morsdagsgave',julegratulasjon:'Julegratulasjon',paaskegratulasjon:'Påskegratulasjon',bryllupsdag:'Bryllupsdag',annet:'Påminnelse'}[t]||t}
 
@@ -614,7 +626,7 @@ function ageDetailed(bday){
 function fmtDDMM(s){if(!s)return '';const d=pd(s);return String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0')}
 
 function renderHContacts(){
-  const list=db.people.slice().sort((a,b)=>score(b)-score(a)).slice(0,5);
+  const list=db.people.slice().sort((a,b)=>score(b)-score(a)).slice(0,3);
   if(!list.length){$('hcontacts').innerHTML='<div class="esl"><div class="esi">👥</div><div class="esb">Ingen personer ennå.<br>Gå til Personer for å legge til.</div></div>';return}
   $('hcontacts').innerHTML=list.map(p=>{
     const r=getRating(p);
@@ -649,13 +661,12 @@ function renderHContacts(){
 }
 function toggleHomeDetail(pid){const el=$('hd-'+pid);if(el)el.style.display=el.style.display==='none'?'block':'none'}
 
-// Build upcoming events for a single person (used for "aktuelt")
 function buildPersonEvents(p){
   const evs=[];
-  if(p.birthday){const d=dAnnual(p.birthday),next=nextAnnual(p.birthday);if(d!==null)evs.push({title:p.name+' bursdag',days:d,date:next})}
-  (p.children||[]).forEach(c=>{if(c.birthday){const d=dAnnual(c.birthday);if(d!==null)evs.push({title:c.name+' bursdag',days:d})}});
-  if(p.followupText&&p.followupDate){const d=dBetween(toISO(),p.followupDate);if(d!==null&&d>=0)evs.push({title:p.followupText,days:d})}
-  (p.reminders||[]).filter(r=>!r.done).forEach(r=>{const next=remNext(r);if(!next)return;const d=dBetween(toISO(),next);if(d!==null&&d>=0)evs.push({title:r.customTitle||remLabel(r.type),days:d})});
+  if(p.birthday){const d=dAnnual(p.birthday),next=nextAnnual(p.birthday);if(d!==null)evs.push({title:p.name+' bursdag',days:d,date:next,type:'birthday',turnsAge:calcAge(p.birthday)!==null?calcAge(p.birthday)+1:null})}
+  (p.children||[]).forEach(c=>{if(c.birthday){const d=dAnnual(c.birthday);if(d!==null)evs.push({title:c.name+' bursdag',days:d,type:'birthday',turnsAge:calcAge(c.birthday)!==null?calcAge(c.birthday)+1:null})}});
+  if(p.followupText&&p.followupDate){const d=dBetween(toISO(),p.followupDate);if(d!==null&&d>=0)evs.push({title:p.followupText,days:d,type:'followup'})}
+  (p.reminders||[]).filter(r=>!r.done).forEach(r=>{const next=remNext(r);if(!next)return;const d=dBetween(toISO(),next);if(d!==null&&d>=0)evs.push({title:r.customTitle||remLabel(r.type),days:d,type:'reminder'})});
   return evs.sort((a,b)=>a.days-b.days);
 }
 
@@ -667,7 +678,7 @@ function buildEvents(){
     if(p.followupText&&p.followupDate){const d=dBetween(toISO(),p.followupDate);if(d!==null&&d>=0)evs.push({type:'followup',date:p.followupDate,days:d,title:p.followupText,sub:p.name,pid:p.id})}
     (p.reminders||[]).filter(r=>!r.done).forEach(r=>{const next=remNext(r);if(!next)return;const d=dBetween(toISO(),next);if(d!==null&&d>=0)evs.push({type:'reminder',date:next,days:d,title:r.customTitle||remLabel(r.type),sub:p.name,pid:p.id,rid:r.id})});
   });
-  return evs.sort((a,b)=>a.days-b.days);
+  return evs.sort((a,b)=>a.days-b.days).slice(0,7);
 }
 
 function renderHEvents(){
@@ -755,33 +766,88 @@ function toggleDetail(id){xPid=xPid===id?null:id;renderPeople()}
 
 function renderDetail(p){
   const log=(p.contactLog||[]).slice().sort((a,b)=>b.date.localeCompare(a.date));
-  // Build aktuelt events
   const aktEvs=buildPersonEvents(p);
-  const aktHTML=!aktEvs.length?'<div class="tfnt tsm" style="padding:7px 0;">Ingen kommende oppfølginger.</div>':aktEvs.map(e=>{
-    const w=e.days===0?'I dag':e.days===1?'I morgen':`Om ${e.days} dager`;
-    return `<div class="loge"><div class="logt"><span class="logt1">${esc(e.title)}</span><span class="logt2" style="color:var(--gold);">${w}</span></div></div>`;
-  }).join('');
-  return `<div class="dtabs">
-    <div class="dtb active" onclick="swDTab(this,'akt','${p.id}')">Aktuelt</div>
-    <div class="dtb" onclick="swDTab(this,'info','${p.id}')">Info</div>
-    <div class="dtb" onclick="swDTab(this,'log','${p.id}')">Logg (${log.length})</div>
-    <div class="dtb" onclick="swDTab(this,'barn','${p.id}')">Barn (${(p.children||[]).length})</div>
-    <div class="dtb" onclick="swDTab(this,'gaver','${p.id}')">Gaver</div>
-  </div>
-  <div class="dpn active" id="dpn-akt-${p.id}">${aktHTML}</div>
-  <div class="dpn" id="dpn-info-${p.id}">
+
+  // INFO TAB — birthday full date, partner, interests, life, notes (editable), children
+  const bdayFull=p.birthday?`${fmtL(p.birthday)}${calcAge(p.birthday)!==null?' · '+calcAge(p.birthday)+' år':''}`:'';
+  const childrenHTML=(p.children||[]).length===0?'':`
+    <div style="margin-top:10px;">
+      <div class="iblbl" style="margin-bottom:5px;">Barn</div>
+      ${p.children.map(c=>{
+        const cAge=ageDetailed(c.birthday);
+        const cBday=c.birthday?`${fmtDDMM(c.birthday).slice(0,5)}.${pd(c.birthday).getFullYear().toString().slice(-2)} · ${cAge||'–'}`:'';
+        return `<div class="chrow"><div><div class="fw5">${esc(c.name)}</div>${cBday?`<div class="tfnt tsm">${cBday}</div>`:''}</div><div>${c.giftNeeded?'<span class="chip chr">Gave</span>':''}</div></div>`;
+      }).join('')}
+    </div>`;
+
+  const infoHTML=`
     <div class="igrid mt8">
-      ${p.birthday?`<div class="ibox"><div class="iblbl">Bursdag</div><div class="ibval">${fmtDDMM(p.birthday)}${calcAge(p.birthday)!==null?' · '+calcAge(p.birthday)+' år':''}</div></div>`:''}
+      ${p.birthday?`<div class="ibox"><div class="iblbl">Bursdag</div><div class="ibval">${bdayFull}</div></div>`:''}
       ${p.partner?`<div class="ibox"><div class="iblbl">Partner</div><div class="ibval">${esc(p.partner)}</div></div>`:''}
+      ${p.origin?`<div class="ibox fcol"><div class="iblbl">Relasjon</div><div class="ibval">${esc(p.origin)}</div></div>`:''}
     </div>
     ${p.interests?`<div class="ibox mt8" style="width:100%;"><div class="iblbl">Interesser</div><div class="ibval">${esc(p.interests)}</div></div>`:''}
     ${p.life?`<div class="ibox mt8" style="width:100%;"><div class="iblbl">Livssituasjon</div><div class="ibval" style="white-space:pre-wrap;">${esc(p.life)}</div></div>`:''}
-    ${p.notes?`<div class="ibox mt8" style="width:100%;"><div class="iblbl">Notater</div><div class="ibval" style="white-space:pre-wrap;">${esc(p.notes)}</div></div>`:''}
+    <div class="ibox mt8" style="width:100%;">
+      <div class="iblbl">Notater</div>
+      <textarea class="finp" style="margin-top:4px;min-height:56px;font-size:.85rem;" placeholder="Legg til notater…" oninput="inlineUpdateNote('${p.id}',this.value)">${esc(p.notes||'')}</textarea>
+    </div>
+    ${childrenHTML}`;
+
+  // AKTUELT TAB — events + add reminder inline
+  const aktEvHTML=!aktEvs.length?'<div class="tfnt tsm" style="padding:6px 0 10px;">Ingen kommende oppfølginger.</div>':aktEvs.map(e=>{
+    const ageStr=(e.type==='birthday'&&e.turnsAge)?` · Fyller ${e.turnsAge} år`:'';
+    const w=e.days===0?'I dag':e.days===1?'I morgen':`Om ${e.days} dager`;
+    return `<div class="loge"><div class="logt"><span class="logt1">${esc(e.title)}${ageStr}</span><span class="logt2" style="color:var(--gold);">${w}</span></div></div>`;
+  }).join('');
+  const aktHTML=`${aktEvHTML}
+    <div style="margin-top:10px;background:var(--bg5);border:1px solid var(--bdr);border-radius:var(--r);padding:8px;">
+      <div class="flbl" style="margin-bottom:5px;">Legg til påminnelse</div>
+      <input class="finp" id="akt-rem-title-${p.id}" placeholder="Hva skal du huske?" style="margin-bottom:5px;font-size:.85rem;">
+      <div class="frow" style="margin-bottom:5px;">
+        <input type="date" class="finp" id="akt-rem-date-${p.id}" style="font-size:.85rem;">
+        <input type="number" class="finp" id="akt-rem-days-${p.id}" value="0" min="0" placeholder="Dager før" style="font-size:.85rem;">
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+        <div class="chkrow" style="padding:0;"><input type="checkbox" id="akt-rem-rec-${p.id}"><label for="akt-rem-rec-${p.id}" style="font-size:.78rem;">Fast</label></div>
+        <div class="chkrow" style="padding:0;"><input type="checkbox" id="akt-rem-gift-${p.id}"><label for="akt-rem-gift-${p.id}" style="font-size:.78rem;">Gave</label></div>
+      </div>
+      <button class="btn btn-q btn-sm btn-fw" onclick="addReminderFromAkt('${p.id}')">Legg til</button>
+    </div>`;
+
+  return `<div class="dtabs">
+    <div class="dtb active" onclick="swDTab(this,'info','${p.id}')">Info</div>
+    <div class="dtb" onclick="swDTab(this,'log','${p.id}')">Logg (${log.length})</div>
+    <div class="dtb" onclick="swDTab(this,'gaver','${p.id}')">Gaver</div>
+    <div class="dtb" onclick="swDTab(this,'akt','${p.id}')">Aktuelt</div>
   </div>
+  <div class="dpn active" id="dpn-info-${p.id}">${infoHTML}</div>
   <div class="dpn" id="dpn-log-${p.id}">${!log.length?'<div class="tfnt tsm" style="padding:7px 0;">Ingen kontaktlogg.</div>':''}${log.map(e=>`<div class="loge"><div class="logt"><span class="logt1">${esc(e.type)}</span><span class="logt2">${fmtL(e.date)}</span></div>${e.content?`<div class="logn">${esc(e.content)}</div>`:''} ${e.feeling?`<div class="logn ital">Humør: ${esc(e.feeling)}</div>`:''} ${e.occupied?`<div class="logn ital">Opptatt av: ${esc(e.occupied)}</div>`:''} ${e.followupText?`<div class="logf">→ ${esc(e.followupText)}</div>`:''}</div>`).join('')}</div>
-  <div class="dpn" id="dpn-barn-${p.id}">${!(p.children||[]).length?'<div class="tfnt tsm" style="padding:7px 0;">Ingen barn registrert.</div>':''}${(p.children||[]).map(c=>`<div class="chrow"><div><div class="fw5">${esc(c.name)}</div>${c.birthday?`<div class="tfnt tsm">${fmtDDMM(c.birthday).replace('.','.').slice(0,5)}.${pd(c.birthday).getFullYear().toString().slice(-2)} · ${ageDetailed(c.birthday)||'–'}</div>`:''}</div><div>${c.giftNeeded?'<span class="chip chr">Gave</span>':''}</div></div>`).join('')}</div>
-  <div class="dpn" id="dpn-gaver-${p.id}"><div class="sh" style="margin-top:6px;">Gaveidéer</div><div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:9px;">${!(p.giftIdeas||[]).length?'<span class="tfnt tsm">Ingen idéer.</span>':''}${(p.giftIdeas||[]).map(g=>`<span class="gitag">${esc(g)}</span>`).join('')}</div><div class="sh">Gavehistorikk</div>${!(p.giftHistory||[]).length?'<div class="tfnt tsm">Ingen historikk.</div>':''}${(p.giftHistory||[]).slice().sort((a,b)=>b.date.localeCompare(a.date)).map(h=>`<div class="loge"><div class="logt"><span class="logt1">${esc(h.label)}</span><span class="logt2">${fmtS(h.date)}</span></div><div class="logn">${esc(h.what)}</div></div>`).join('')}</div>`;
+  <div class="dpn" id="dpn-gaver-${p.id}"><div class="sh" style="margin-top:6px;">Gaveidéer</div><div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:9px;">${!(p.giftIdeas||[]).length?'<span class="tfnt tsm">Ingen idéer.</span>':''}${(p.giftIdeas||[]).map(g=>`<span class="gitag">${esc(g)}</span>`).join('')}</div><div class="sh">Gavehistorikk</div>${!(p.giftHistory||[]).length?'<div class="tfnt tsm">Ingen historikk.</div>':''}${(p.giftHistory||[]).slice().sort((a,b)=>b.date.localeCompare(a.date)).map(h=>`<div class="loge"><div class="logt"><span class="logt1">${esc(h.label)}</span><span class="logt2">${fmtS(h.date)}</span></div><div class="logn">${esc(h.what)}</div></div>`).join('')}</div>
+  <div class="dpn" id="dpn-akt-${p.id}">${aktHTML}</div>`;
 }
+
+function inlineUpdateNote(pid, val){
+  const p=db.people.find(x=>x.id===pid);
+  if(p){p.notes=val.trim();sched();}
+}
+
+function addReminderFromAkt(pid){
+  const p=db.people.find(x=>x.id===pid);if(!p)return;
+  const title=$(`akt-rem-title-${pid}`)?.value.trim();
+  const date=$(`akt-rem-date-${pid}`)?.value;
+  if(!title){toast('Skriv en tittel.');return}
+  if(!date){toast('Velg en dato.');return}
+  if(!p.reminders)p.reminders=[];
+  p.reminders.push({id:uid(),customTitle:title,date,daysBefore:parseInt($(`akt-rem-days-${pid}`)?.value)||0,recurring:$(`akt-rem-rec-${pid}`)?.checked||false,includesGift:$(`akt-rem-gift-${pid}`)?.checked||false,done:false});
+  sched();
+  // Re-render this card
+  const card=$(`pc-${pid}`);
+  if(card){card.replaceWith(htmlToEl(renderPCard(p)));}
+  toast('Påminnelse lagt til.');
+  renderGifts();updGBadge();
+}
+function htmlToEl(html){const t=document.createElement('div');t.innerHTML=html;return t.firstChild;}
 
 function swDTab(el,pane,pid){
   const panel=$(`dt-${pid}`);
@@ -837,9 +903,33 @@ function renderPChildren(){
 }
 function addChild(){const nm=$('chnm').value.trim();if(!nm){toast('Skriv inn barnets navn.');return}tChildren.push({id:uid(),name:nm,birthday:$('chbd').value,giftNeeded:$('chgift').checked});$('chnm').value='';$('chbd').value='';$('chgift').checked=false;renderPChildren()}
 
-function onRemChg(){const t=$('remtype').value;$('remdatew').style.display=(t==='bryllupsdag'||t==='annet')?'':'none'}
-function renderPRems(){$('preminders').innerHTML=tRems.map((r,i)=>`<div class="remrow"><div><div class="remt">${esc(r.customTitle||remLabel(r.type))}</div><div class="rems">${r.daysBefore} dager i forveien${r.includesGift?' · Gave':''}</div></div><button class="btn btn-q btn-sm" onclick="tRems.splice(${i},1);renderPRems()">Fjern</button></div>`).join('')}
-function addReminder(){const t=$('remtype').value;if(!t){toast('Velg en type.');return}tRems.push({id:uid(),type:t,customTitle:$('remtitle').value.trim(),date:$('remdate').value,daysBefore:parseInt($('remdays').value)||14,includesGift:$('remgift').checked,done:false});$('remtype').value='';$('remtitle').value='';$('remdate').value='';renderPRems()}
+function renderPRems(){
+  $('preminders').innerHTML=tRems.map((r,i)=>`
+    <div style="background:var(--bg5);border:1px solid var(--bdr);border-radius:var(--r);padding:8px;margin-bottom:6px;">
+      <div class="fld" style="margin-bottom:5px;"><input class="finp" value="${esc(r.customTitle||'')}" placeholder="Tittel" oninput="tRems[${i}].customTitle=this.value" style="font-size:.85rem;"></div>
+      <div class="frow" style="margin-bottom:5px;">
+        <div class="fld" style="margin-bottom:0;"><input type="date" class="finp" value="${r.date||''}" oninput="tRems[${i}].date=this.value" style="font-size:.85rem;"></div>
+        <div class="fld" style="margin-bottom:0;"><input type="number" class="finp" value="${r.daysBefore||0}" min="0" placeholder="Dager før" oninput="tRems[${i}].daysBefore=parseInt(this.value)||0" style="font-size:.85rem;"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+        <div style="display:flex;gap:10px;">
+          <div class="chkrow" style="padding:0;"><input type="checkbox" id="remrec${i}" ${r.recurring?'checked':''} onchange="tRems[${i}].recurring=this.checked"><label for="remrec${i}" style="font-size:.78rem;">Fast</label></div>
+          <div class="chkrow" style="padding:0;"><input type="checkbox" id="remgft${i}" ${r.includesGift?'checked':''} onchange="tRems[${i}].includesGift=this.checked"><label for="remgft${i}" style="font-size:.78rem;">Gave</label></div>
+        </div>
+        <button class="btn btn-d btn-sm" onclick="tRems.splice(${i},1);renderPRems()">Fjern</button>
+      </div>
+      ${r.date?`<div style="font-size:.68rem;color:var(--text3);margin-top:3px;">${r.recurring?'Fast · ':'Én gang · '}${fmtL(r.date)}${r.daysBefore>0?' · varsler '+r.daysBefore+'d før':''}</div>`:''}
+    </div>`).join('');
+}
+function addReminder(){
+  const title=$('remtitle').value.trim();
+  if(!title){toast('Skriv en tittel for påminnelsen.');return}
+  const date=$('remdate').value;
+  if(!date){toast('Velg en dato.');return}
+  tRems.push({id:uid(),customTitle:title,date,daysBefore:parseInt($('remdays').value)||0,recurring:$('remrecurring').checked,includesGift:$('remgift').checked,done:false});
+  $('remtitle').value='';$('remdate').value='';$('remdays').value='0';$('remrecurring').checked=false;$('remgift').checked=false;
+  renderPRems();
+}
 
 async function savePerson(){
   const nm=$('psnm').value.trim();if(!nm){toast('Navn er påkrevd.');return}
@@ -877,14 +967,36 @@ function moreContact(){closeOL('pcdlg');if(pcPid)openContactSheet(pcPid)}
 
 // ─── GIFTS ───
 function renderGifts(){
-  const gifts=giftList(showAllG);
   $('gftoggle').textContent=showAllG?'Fremtidige':'Vis alle';
-  if(!gifts.length){$('glist').innerHTML='<div class="esl"><div class="esi">🎁</div><div class="esb">Ingen kommende gaver.</div></div>';return}
-  $('glist').innerHTML=gifts.map(g=>{
-    const uc=g.days<=7?'chr':g.days<=14?'chg':'chn';
-    const w=g.days===0?'I dag':g.days===1?'I morgen':g.date?`Om ${g.days} dager`:'–';
-    return `<div class="gcrd"><div class="gcrd-i"><div class="gico">🎁</div><div class="ginfo"><div class="gperson">${esc(g.name)}</div><div class="gocc">${esc(g.label)}</div><div class="gwhen"><span class="chip ${uc}">${w}</span>${g.date?' · '+fmtS(g.date):''}</div>${g.ideas.length?`<div class="gideas">💡 ${g.ideas.map(esc).join(', ')}</div>`:''}</div><button class="btn btn-g btn-sm" style="flex-shrink:0;" onclick="openGiftSheet('${g.pid}','${g.rid}')">Kjøpt ✓</button></div></div>`;
-  }).join('')
+  const pending=giftList(false);
+
+  if(showAllG){
+    // Collect bought gifts from giftHistory across all people
+    const bought=[];
+    db.people.forEach(p=>{(p.giftHistory||[]).forEach(h=>bought.push({name:p.name,label:h.label,what:h.what,date:h.date}))});
+    bought.sort((a,b)=>b.date.localeCompare(a.date));
+
+    let html='';
+    if(!pending.length){html+='<div class="esl" style="padding:12px 0;"><div class="esb">Ingen fremtidige gaver.</div></div>';}
+    else{html+=pending.map(g=>{
+      const uc=g.days<=7?'chr':g.days<=14?'chg':'chn';
+      const w=g.days===0?'I dag':g.days===1?'I morgen':g.date?`Om ${g.days} dager`:'–';
+      return `<div class="gcrd"><div class="gcrd-i"><div class="gico">🎁</div><div class="ginfo"><div class="gperson">${esc(g.name)}</div><div class="gocc">${esc(g.label)}</div><div class="gwhen"><span class="chip ${uc}">${w}</span>${g.date?' · '+fmtS(g.date):''}</div>${g.ideas.length?`<div class="gideas">💡 ${g.ideas.map(esc).join(', ')}</div>`:''}</div><button class="btn btn-g btn-sm" style="flex-shrink:0;" onclick="openGiftSheet('${g.pid}','${g.rid}')">Kjøpt ✓</button></div></div>`;
+    }).join('');}
+
+    if(bought.length){
+      html+=`<div style="font-family:'Cormorant SC',serif;font-size:.72rem;letter-spacing:.12em;color:var(--parch2);margin:14px 0 8px;border-top:1px solid var(--bdr);padding-top:12px;">Kjøpte gaver</div>`;
+      html+=bought.map(g=>`<div class="gcrd"><div class="gcrd-i"><div class="gico" style="background:var(--sage2);border-color:rgba(90,122,96,.3);">✓</div><div class="ginfo"><div class="gperson">${esc(g.name)}</div><div class="gocc">${esc(g.label)}</div><div class="gwhen" style="color:var(--text3);">${fmtL(g.date)}</div><div class="gideas">${esc(g.what)}</div></div></div></div>`).join('');
+    }
+    $('glist').innerHTML=html;
+  } else {
+    if(!pending.length){$('glist').innerHTML='<div class="esl"><div class="esi">🎁</div><div class="esb">Ingen kommende gaver.</div></div>';return}
+    $('glist').innerHTML=pending.map(g=>{
+      const uc=g.days<=7?'chr':g.days<=14?'chg':'chn';
+      const w=g.days===0?'I dag':g.days===1?'I morgen':g.date?`Om ${g.days} dager`:'–';
+      return `<div class="gcrd"><div class="gcrd-i"><div class="gico">🎁</div><div class="ginfo"><div class="gperson">${esc(g.name)}</div><div class="gocc">${esc(g.label)}</div><div class="gwhen"><span class="chip ${uc}">${w}</span>${g.date?' · '+fmtS(g.date):''}</div>${g.ideas.length?`<div class="gideas">💡 ${g.ideas.map(esc).join(', ')}</div>`:''}</div><button class="btn btn-g btn-sm" style="flex-shrink:0;" onclick="openGiftSheet('${g.pid}','${g.rid}')">Kjøpt ✓</button></div></div>`;
+    }).join('');
+  }
 }
 function toggleAllGifts(){showAllG=!showAllG;renderGifts()}
 function updGBadge(){const n=giftList(false).filter(g=>g.days<=14).length;const b=$('gbadge');b.textContent=n;b.style.display=n>0?'':'none'}
